@@ -1,5 +1,5 @@
 from django.contrib import admin
-from unfold.admin import ModelAdmin 
+from unfold.admin import ModelAdmin
 from .models import PrivacyPolicy, TermsAndCondition, AboutUs, ContactMessage
 
 
