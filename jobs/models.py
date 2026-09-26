@@ -120,3 +120,12 @@ class JobRole(models.Model):
 
     def __str__(self):
         return self.job_role
+
+
+class AgentHiddenJob(models.Model):
+    agent_id = models.PositiveIntegerField()
+    job_id = models.CharField(max_length=50)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('agent_id', 'job_id')

@@ -4,7 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.db.models import Q
-from .models import Job, DraftJob, Meetings
+from .models import Job, DraftJob, Meetings, AgentHiddenJob
 from .serializers import *
 from .services import get_jobs_for_agent
 from core.pagination import CustomPagination
@@ -108,7 +108,10 @@ class ActiveJobAPIView(APIView):
 
         try:
             with transaction.atomic():
-                job.delete()
+                if user.role == "Agent":
+                    AgentHiddenJob.objects.get_or_create(agent_id=user.user_id, job_id=job.job_id)
+                else:
+                    job.delete()
         except IntegrityError as exc:
             return Response({"status": False, "message": "Unable to delete job due to related records.", "error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
