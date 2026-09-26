@@ -1,5 +1,5 @@
 import json
-from .models import Job, JobAIResult, AgentHiddenJob
+from .models import Job, JobAIResult
 
 def get_jobs_for_agent(agent_id: int):
     ai_results = JobAIResult.objects.exclude(suggested_talents__isnull=True)
@@ -31,6 +31,4 @@ def get_jobs_for_agent(agent_id: int):
         except (json.JSONDecodeError, TypeError, ValueError):
             continue
 
-    hidden_job_ids = set(AgentHiddenJob.objects.filter(agent_id=agent_id).values_list('job_id', flat=True))
-
-    return Job.objects.filter(job_id__in=list(matched_job_ids)).exclude(job_id__in=hidden_job_ids)
+    return Job.objects.filter(job_id__in=list(matched_job_ids))
