@@ -98,8 +98,7 @@ class ActiveJobAPIView(APIView):
         if user.role == "Admin":
             queryset = Job.objects.all()
         elif user.role == "Agent":
-            # Agents should not be allowed to delete jobs (change if your rules differ)
-            return Response({"status": False, "message": "Permission denied"}, status=status.HTTP_403_FORBIDDEN)
+            queryset = get_jobs_for_agent(agent_id=user.user_id)
         else:
             queryset = Job.objects.filter(job_created_by_id=user.user_id)
 
