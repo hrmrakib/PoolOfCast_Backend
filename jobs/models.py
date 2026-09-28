@@ -129,3 +129,69 @@ class AgentHiddenJob(models.Model):
 
     class Meta:
         unique_together = ('agent_id', 'job_id')
+
+
+REQUEST_STATUS_CHOICES = [
+    ("requested", "Requested"),
+    ("accepted", "Accepted"),
+    ("rejected", "Rejected"),
+    ("responded", "Responded"),
+]
+
+
+class SelfTapeRequest(models.Model):
+    request_id = models.AutoField(primary_key=True)
+    job_id = models.IntegerField()
+    talent_id = models.BigIntegerField()
+    status = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default="requested")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "jobs_selftape_requests"
+        managed = False
+
+
+class SelfTapeLink(models.Model):
+    link_id = models.AutoField(primary_key=True)
+    request = models.ForeignKey(
+        SelfTapeRequest,
+        on_delete=models.DO_NOTHING,
+        db_column="request_id",
+        related_name="links",
+    )
+    tape_url = models.URLField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "jobs_selftape_links"
+        managed = False
+
+
+class PolaRequest(models.Model):
+    request_id = models.AutoField(primary_key=True)
+    job_id = models.IntegerField()
+    talent_id = models.BigIntegerField()
+    status = models.CharField(max_length=20, choices=REQUEST_STATUS_CHOICES, default="requested")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "jobs_pola_requests"
+        managed = False
+
+
+class PolaLink(models.Model):
+    link_id = models.AutoField(primary_key=True)
+    request = models.ForeignKey(
+        PolaRequest,
+        on_delete=models.DO_NOTHING,
+        db_column="request_id",
+        related_name="links",
+    )
+    pola_url = models.URLField(max_length=500)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "jobs_pola_links"
+        managed = False

@@ -11,14 +11,28 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='jobrole',
-            name='job',
-            field=models.ForeignKey(db_column='job_id', on_delete=django.db.models.deletion.CASCADE, related_name='roles', to='jobs.job'),
-        ),
-        migrations.AlterField(
-            model_name='meetings',
-            name='job',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='jobs.job'),
+        # Wrapped in SeparateDatabaseAndState: `jobs.Job` is managed=False (its table is
+        # owned by the FastAPI service and does not exist in a fresh/test database), so
+        # emitting a real ADD CONSTRAINT for these FKs fails outside of environments where
+        # jobs_talent_job already exists. This keeps Django's migration *state* identical
+        # to a plain AlterField (matching models.py, no makemigrations drift) while making
+        # the actual DB operation a no-op, consistent with the db_constraint=False pattern
+        # already used for these exact fields in 0001_initial/0005-0007. Already applied on
+        # production, so this change has no effect there (Django never re-runs an applied
+        # migration) - it only matters for migrating a brand new/fresh database.
+        migrations.SeparateDatabaseAndState(
+            database_operations=[],
+            state_operations=[
+                migrations.AlterField(
+                    model_name='jobrole',
+                    name='job',
+                    field=models.ForeignKey(db_column='job_id', on_delete=django.db.models.deletion.CASCADE, related_name='roles', to='jobs.job'),
+                ),
+                migrations.AlterField(
+                    model_name='meetings',
+                    name='job',
+                    field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='jobs.job'),
+                ),
+            ],
         ),
     ]
