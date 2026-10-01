@@ -29,7 +29,7 @@ urlpatterns = [
     path("api/v1/chat/", include("chat.urls")),
     path("api/v1/jobs/", include("jobs.urls")),
     path("api/v1/ecasting/", include("ecasting.urls")),
-    path("api/jobs/", include("jobs.casting_requests_urls")),
+    path("api/v1/jobs/", include("jobs.casting_requests_urls")),
 
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="swagger-ui"),
