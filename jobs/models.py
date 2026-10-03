@@ -112,7 +112,9 @@ class JobRole(models.Model):
     talent = models.ForeignKey(
         "talent.Talent",
         on_delete=models.CASCADE,
-        related_name="job_roles"
+        related_name="job_roles",
+        null=True,
+        blank=True,
     )
 
     assign_status = models.BooleanField(default=True)
