@@ -195,3 +195,44 @@ class PolaLink(models.Model):
     class Meta:
         db_table = "jobs_pola_links"
         managed = False
+
+
+class JobRoleAssignment(models.Model):
+    id = models.AutoField(primary_key=True)
+    job_id = models.IntegerField()
+    job_role = models.ForeignKey(
+        JobRole,
+        on_delete=models.CASCADE,
+        db_column="job_role_id",
+        related_name="assignments",
+    )
+    talent = models.ForeignKey(
+        "talent.Talent",
+        on_delete=models.DO_NOTHING,
+        db_column="talent_id",
+        related_name="role_assignments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "jobs_jobrole_assignments"
+        managed = False
+
+
+class Booking(models.Model):
+    booking_id = models.AutoField(primary_key=True)
+    session_id = models.CharField(max_length=255, null=True, blank=True)
+    user_id = models.BigIntegerField()
+    talent = models.ForeignKey(
+        "talent.Talent",
+        on_delete=models.DO_NOTHING,
+        db_column="talent_id",
+        related_name="bookings",
+    )
+    job_id = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    booking_date = models.DateField(null=True, blank=True)
+
+    class Meta:
+        db_table = "jobs_talent_bookings"
+        managed = False
