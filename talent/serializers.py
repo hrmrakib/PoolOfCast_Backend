@@ -356,6 +356,7 @@ class ShortlistedTalentInfoSerializer(serializers.ModelSerializer):
 
 class ShortlistedTalentSerializer(serializers.ModelSerializer):
     talent_info = ShortlistedTalentInfoSerializer(source='talent', read_only=True)
+    sort_order = serializers.SerializerMethodField()
 
     class Meta:
         model = ShortListedTalent
@@ -364,7 +365,11 @@ class ShortlistedTalentSerializer(serializers.ModelSerializer):
             'session_id',
             'created_at',
             'talent_info',
+            'sort_order',
         ]
+
+    def get_sort_order(self, obj):
+        return getattr(obj, 'sort_order', None)
 
 
 # ─── 4.5. Job Role (one row per talent assigned to a role on a job) ────────────
@@ -453,7 +458,15 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
             'talent__images',
             'talent__available_dates',
         )
-        return ShortlistedTalentSerializer(shortlisted, many=True, context=self.context).data
+        # Client-defined order first (drag-and-drop); unordered rows keep newest-first.
+        positions = dict(
+            ShortlistOrder.objects.filter(job_id=obj.job_id).values_list('shortlisted_id', 'position')
+        )
+        rows = list(shortlisted)
+        for row in rows:
+            row.sort_order = positions.get(row.shortlisted_id)
+        rows.sort(key=lambda r: (r.sort_order is None, r.sort_order or 0))
+        return ShortlistedTalentSerializer(rows, many=True, context=self.context).data
 
     def get_job_photo(self, obj):
             if not obj.job_photo:

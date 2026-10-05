@@ -18,6 +18,8 @@ urlpatterns = [
     path("client/talents/shortlisted/", ShortListedTalentAPIView.as_view()),
     path("client/talents/shortlisted/<int:job_id>/", ActiveJobDetailView.as_view()),
 
+    path("client/talents/shortlisted/<int:job_id>/reorder/", ShortlistReorderAPIView.as_view()),
+
     path("client/talents/public_shortlisted/", PublicShortListedTalentAPIView.as_view()),
     
     # Web Images API

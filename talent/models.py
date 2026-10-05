@@ -214,6 +214,21 @@ class ShortListedTalent(models.Model):
 
 
 
+class ShortlistOrder(models.Model):
+    """Client-defined drag-and-drop position of a shortlisted talent within a job.
+
+    Kept in its own table because jobs_shortlisted_talents is unmanaged (FastAPI-owned),
+    so shortlisted_id is a plain integer, not a FK.
+    """
+    shortlisted_id = models.BigIntegerField(unique=True)
+    job_id = models.IntegerField(db_index=True)
+    position = models.PositiveIntegerField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "talent_shortlist_order"
+
+
 class WebImages(models.Model):
     iamge1 = models.ImageField(upload_to='webimage')
     iamge2 = models.ImageField(upload_to='webimage')

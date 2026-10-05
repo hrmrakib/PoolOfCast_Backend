@@ -8,7 +8,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
-from .models import Talent
+from .models import Talent, ShortListedTalent, ShortlistOrder
 from .serializers import *
 from utils.permissions import IsAgent, IsAdminUserRole
 from core.pagination import CustomPagination
@@ -191,7 +191,12 @@ class AgentTalentDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        talent.delete()
+        with transaction.atomic():
+            # These relations use DO_NOTHING (unmanaged tables), so clear them manually.
+            ShortListedTalent.objects.filter(talent=talent).delete()
+            talent.role_assignments.all().delete()
+            talent.bookings.all().delete()
+            talent.delete()
         return Response(
             {"status": True, "status_code": 200, "message": "Talent deleted successfully."},
             status=status.HTTP_200_OK
@@ -259,7 +264,11 @@ class AdminTalentDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        talent.delete()
+        with transaction.atomic():
+            ShortListedTalent.objects.filter(talent=talent).delete()
+            talent.role_assignments.all().delete()
+            talent.bookings.all().delete()
+            talent.delete()
         return Response(
             {"status": True, "status_code": 200, "message": "Talent deleted successfully."},
             status=status.HTTP_200_OK
@@ -445,6 +454,57 @@ class ActiveJobDetailView(APIView):
         serializer = JobWithShortlistedSerializer(job, context={'request': request})
         return Response(serializer.data, status=status.HTTP_200_OK)
     
+
+
+class ShortlistReorderAPIView(APIView):
+    """Save the drag-and-drop order of a job's shortlisted talents.
+
+    PUT body: {"order": [shortlisted_id, shortlisted_id, ...]}  (first = top)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def put(self, request, job_id):
+        job = get_object_or_404(Job, job_id=job_id)
+        if job.job_created_by_id != request.user.user_id:
+            return Response(
+                {"status": False, "status_code": 403, "message": "Only the job creator can reorder."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        order = request.data.get("order")
+        if not isinstance(order, list) or not order or not all(isinstance(i, int) for i in order):
+            return Response(
+                {"status": False, "status_code": 400, "message": "'order' must be a non-empty list of shortlisted_id."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(set(order)) != len(order):
+            return Response(
+                {"status": False, "status_code": 400, "message": "'order' contains duplicate ids."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        valid_ids = set(
+            ShortListedTalent.objects.filter(job=job, shortlisted_id__in=order)
+            .values_list("shortlisted_id", flat=True)
+        )
+        invalid = [i for i in order if i not in valid_ids]
+        if invalid:
+            return Response(
+                {"status": False, "status_code": 400, "message": f"Not shortlisted in this job: {invalid}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        with transaction.atomic():
+            ShortlistOrder.objects.filter(job_id=job.job_id).delete()
+            ShortlistOrder.objects.bulk_create([
+                ShortlistOrder(shortlisted_id=sid, job_id=job.job_id, position=pos)
+                for pos, sid in enumerate(order, start=1)
+            ])
+
+        return Response(
+            {"status": True, "status_code": 200, "message": "Shortlist order saved."},
+            status=status.HTTP_200_OK
+        )
 
 
 class PublicShortListedTalentAPIView(APIView):
