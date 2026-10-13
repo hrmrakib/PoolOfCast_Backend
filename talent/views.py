@@ -15,6 +15,8 @@ from .serializers import *
 from utils.permissions import IsAgent, IsAdminUserRole, IsClient
 from core.pagination import CustomPagination
 import logging
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import serializers as drf_serializers
 
 logger = logging.getLogger(__name__)
 
@@ -529,6 +531,19 @@ class ShortlistMediaAPIView(APIView):
             return None
         return job
 
+    @extend_schema(
+        tags=["Shortlist Media"],
+        summary="Upload image/video to the shortlist page",
+        request={"multipart/form-data": inline_serializer(
+            name="ShortlistMediaUploadRequest",
+            fields={
+                "file": drf_serializers.ListField(child=drf_serializers.FileField()),
+                "caption": drf_serializers.CharField(required=False),
+                "media_date": drf_serializers.DateTimeField(required=False),
+            },
+        )},
+        responses={201: ShortlistMediaSerializer(many=True)},
+    )
     def post(self, request, job_id):
         if not self._get_job(request, job_id):
             return Response(
@@ -597,6 +612,7 @@ class ShortlistMediaAPIView(APIView):
 class ShortlistMediaDeleteAPIView(APIView):
     permission_classes = [IsAuthenticated, IsClient]
 
+    @extend_schema(tags=["Shortlist Media"], summary="Delete a shortlist media item", request=None, responses={200: None})
     def delete(self, request, job_id, media_id):
         job = get_object_or_404(Job, job_id=job_id)
         if job.job_created_by_id != request.user.user_id:
