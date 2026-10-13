@@ -513,10 +513,10 @@ class ShortlistReorderAPIView(APIView):
 
 
 class ShortlistMediaAPIView(APIView):
-    """Client (job creator) uploads images/videos shown on the public shortlist preview.
+    """Client (job creator) uploads images/videos for one shortlisted talent.
 
-    POST multipart: file (required), caption and media_date (optional, ISO date/datetime). The media then appears in
-    shortlist_media on GET client/talents/shortlisted/<job_id>/.
+    POST multipart: talent_id and file (required), caption and media_date (optional, ISO date/datetime).
+    The media then appears in that talent's shortlist_media on GET client/talents/shortlisted/<job_id>/.
     """
     permission_classes = [IsAuthenticated, IsClient]
     parser_classes = [MultiPartParser, FormParser]
@@ -540,10 +540,11 @@ class ShortlistMediaAPIView(APIView):
 
     @extend_schema(
         tags=["Shortlist Media"],
-        summary="Upload image/video to the shortlist page",
+        summary="Upload image/video for a shortlisted talent",
         request={"multipart/form-data": inline_serializer(
             name="ShortlistMediaUploadRequest",
             fields={
+                "talent_id": drf_serializers.IntegerField(),
                 "file": drf_serializers.ListField(child=drf_serializers.FileField()),
                 "caption": drf_serializers.CharField(required=False),
                 "media_date": drf_serializers.DateTimeField(required=False),
@@ -556,6 +557,18 @@ class ShortlistMediaAPIView(APIView):
             return Response(
                 {"status": False, "status_code": 403, "message": "Only the job creator can upload."},
                 status=status.HTTP_403_FORBIDDEN
+            )
+        try:
+            talent_id = int(request.data.get("talent_id"))
+        except (TypeError, ValueError):
+            return Response(
+                {"status": False, "status_code": 400, "message": "talent_id is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not ShortListedTalent.objects.filter(job_id=job_id, talent_id=talent_id).exists():
+            return Response(
+                {"status": False, "status_code": 400, "message": "This talent is not shortlisted in this job."},
+                status=status.HTTP_400_BAD_REQUEST
             )
         files = request.FILES.getlist("file")
         if not files:
@@ -608,7 +621,7 @@ class ShortlistMediaAPIView(APIView):
 
         created = [
             ShortlistMedia.objects.create(
-                job_id=job_id, file=f, media_type=mt,
+                job_id=job_id, talent_id=talent_id, file=f, media_type=mt,
                 caption=caption, uploaded_by=request.user.user_id,
                 **({"media_date": media_date} if media_date else {}),
             )

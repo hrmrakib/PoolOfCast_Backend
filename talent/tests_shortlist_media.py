@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
 from jobs.models import Job
-from talent.models import ShortlistMedia, ShortListedTalent, ShortlistOrder
+from talent.models import ShortlistMedia, ShortListedTalent, Talent
 
 User = get_user_model()
 
@@ -22,6 +22,10 @@ class ShortlistMediaTests(TestCase):
             job_created_by_id=self.client_user.user_id, title="t", description="d",
             casting_roles="r", location="l", job_type="x", status="active", currency="$",
             created_at=timezone.now(), updated_at=timezone.now())
+        self.talent = Talent.objects.create(agent=self.client_user, gender="female", name="T One")
+        self.talent2 = Talent.objects.create(agent=self.client_user, gender="male", name="T Two")
+        for t in (self.talent, self.talent2):
+            ShortListedTalent.objects.create(job=self.job, talent=t, created_at=timezone.now())
         self.api = APIClient()
         self.api.credentials(HTTP_AUTHORIZATION="Bearer " + str(RefreshToken.for_user(self.client_user).access_token))
         self.url = f"/api/v1/client/talents/shortlisted/{self.job.job_id}/media/"
@@ -29,7 +33,7 @@ class ShortlistMediaTests(TestCase):
     def test_upload_list_delete(self):
         img = SimpleUploadedFile("a.jpg", b"x", content_type="image/jpeg")
         vid = SimpleUploadedFile("b.mp4", b"y", content_type="video/mp4")
-        r = self.api.post(self.url, {"file": [img, vid], "media_date": "2026-10-01T09:30:00", "caption": "c"}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": [img, vid], "media_date": "2026-10-01T09:30:00", "caption": "c"}, format="multipart")
         self.assertEqual(r.status_code, 201, r.content)
         self.assertEqual({d["media_type"] for d in r.data["data"]}, {"image", "video"})
         self.assertIn("2026-10-01", r.data["data"][0]["media_date"])
@@ -37,8 +41,10 @@ class ShortlistMediaTests(TestCase):
         # public GET has the new field, existing fields intact
         pub = APIClient().get(f"/api/v1/client/talents/shortlisted/{self.job.job_id}/")
         self.assertEqual(pub.status_code, 200)
-        self.assertEqual(len(pub.data["shortlist_media"]), 2)
-        self.assertIn("shortlisted_talents", pub.data)
+        by_talent = {t["talent_info"]["talent_id"]: t["shortlist_media"] for t in pub.data["shortlisted_talents"]}
+        self.assertEqual(len(by_talent[self.talent.talent_id]), 2)
+        self.assertEqual(by_talent[self.talent2.talent_id], [])
+        self.assertNotIn("shortlist_media", pub.data)
 
         mid = r.data["data"][0]["id"]
         d = self.api.delete(f"{self.url}{mid}/")
@@ -47,26 +53,30 @@ class ShortlistMediaTests(TestCase):
 
     def test_default_date_date_only_and_validation(self):
         f = lambda n, t: SimpleUploadedFile(n, b"x", content_type=t)
-        r = self.api.post(self.url, {"file": f("a.png", "image/png")}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": f("a.png", "image/png")}, format="multipart")
         self.assertEqual(r.status_code, 201)
         self.assertTrue(r.data["data"][0]["media_date"])
-        r = self.api.post(self.url, {"file": f("a.png", "image/png"), "media_date": "2026-10-01"}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": f("a.png", "image/png"), "media_date": "2026-10-01"}, format="multipart")
         self.assertEqual(r.status_code, 201)
-        r = self.api.post(self.url, {"file": f("a.png", "image/png"), "media_date": "junk"}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": f("a.png", "image/png"), "media_date": "junk"}, format="multipart")
         self.assertEqual(r.status_code, 400)
-        r = self.api.post(self.url, {"file": f("a.txt", "text/plain")}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": f("a.txt", "text/plain")}, format="multipart")
         self.assertEqual(r.status_code, 400)
         self.assertIn("jpg", r.data["message"])
         self.assertIn("mp4", r.data["message"])
-        r = self.api.post(self.url, {"file": f("a.png", "video/mp4")}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id, "file": f("a.png", "video/mp4")}, format="multipart")
         self.assertEqual(r.status_code, 400)
-        r = self.api.post(self.url, {}, format="multipart")
+        r = self.api.post(self.url, {"talent_id": self.talent.talent_id}, format="multipart")
+        self.assertEqual(r.status_code, 400)
+        r = self.api.post(self.url, {"file": f("a.png", "image/png")}, format="multipart")
+        self.assertEqual(r.status_code, 400)
+        r = self.api.post(self.url, {"talent_id": 99999, "file": f("a.png", "image/png")}, format="multipart")
         self.assertEqual(r.status_code, 400)
 
     def test_permissions(self):
         f = SimpleUploadedFile("a.png", b"x", content_type="image/png")
-        self.assertEqual(APIClient().post(self.url, {"file": f}, format="multipart").status_code, 401)
+        self.assertEqual(APIClient().post(self.url, {"talent_id": self.talent.talent_id, "file": f}, format="multipart").status_code, 401)
         o = APIClient()
         o.credentials(HTTP_AUTHORIZATION="Bearer " + str(RefreshToken.for_user(self.other).access_token))
         f = SimpleUploadedFile("a.png", b"x", content_type="image/png")
-        self.assertEqual(o.post(self.url, {"file": f}, format="multipart").status_code, 403)
+        self.assertEqual(o.post(self.url, {"talent_id": self.talent.talent_id, "file": f}, format="multipart").status_code, 403)

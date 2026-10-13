@@ -354,9 +354,23 @@ class ShortlistedTalentInfoSerializer(serializers.ModelSerializer):
 
 # ─── 4. Shortlisted Talent Row ──────────────────────────────────────────────────
 
+class ShortlistMediaSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    media_type = serializers.CharField(source='get_media_type_display', read_only=True)
+
+    class Meta:
+        model = ShortlistMedia
+        fields = ['id', 'url', 'media_type', 'caption', 'media_date', 'created_at']
+
+    def get_url(self, obj):
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+
+
 class ShortlistedTalentSerializer(serializers.ModelSerializer):
     talent_info = ShortlistedTalentInfoSerializer(source='talent', read_only=True)
     sort_order = serializers.SerializerMethodField()
+    shortlist_media = serializers.SerializerMethodField()
 
     class Meta:
         model = ShortListedTalent
@@ -366,7 +380,12 @@ class ShortlistedTalentSerializer(serializers.ModelSerializer):
             'created_at',
             'talent_info',
             'sort_order',
+            'shortlist_media',
         ]
+
+    def get_shortlist_media(self, obj):
+        media = getattr(obj, 'media_list', [])
+        return ShortlistMediaSerializer(media, many=True, context=self.context).data
 
     def get_sort_order(self, obj):
         return getattr(obj, 'sort_order', None)
@@ -389,21 +408,7 @@ class JobRoleSerializer(serializers.ModelSerializer):
 
 # ─── 5. Job with Shortlisted Talents ────────────────────────────────────────────
 
-class ShortlistMediaSerializer(serializers.ModelSerializer):
-    url = serializers.SerializerMethodField()
-    media_type = serializers.CharField(source='get_media_type_display', read_only=True)
-
-    class Meta:
-        model = ShortlistMedia
-        fields = ['id', 'url', 'media_type', 'caption', 'media_date', 'created_at']
-
-    def get_url(self, obj):
-        request = self.context.get('request')
-        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
-
-
 class JobWithShortlistedSerializer(serializers.ModelSerializer):
-    shortlist_media = serializers.SerializerMethodField()
     shortlisted_talents = serializers.SerializerMethodField()
     job_roles = serializers.SerializerMethodField()
     job_photo = serializers.SerializerMethodField()
@@ -431,7 +436,6 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'shortlisted_talents',
-            'shortlist_media',
             'job_roles',
             'created_by_image',
             'created_by_name',
@@ -461,10 +465,6 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
             return None
         return getattr(creator, 'full_name', None) or getattr(creator, 'email', None)
 
-    def get_shortlist_media(self, obj):
-        media = ShortlistMedia.objects.filter(job_id=obj.job_id)
-        return ShortlistMediaSerializer(media, many=True, context=self.context).data
-
     def get_job_roles(self, obj):
         # No select_related/prefetch needed — JobRoleSerializer only reads the raw
         # talent_id FK column, already present on the JobRole row itself.
@@ -481,9 +481,13 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
         positions = dict(
             ShortlistOrder.objects.filter(job_id=obj.job_id).values_list('shortlisted_id', 'position')
         )
+        media_by_talent = {}
+        for m in ShortlistMedia.objects.filter(job_id=obj.job_id, talent_id__isnull=False):
+            media_by_talent.setdefault(m.talent_id, []).append(m)
         rows = list(shortlisted)
         for row in rows:
             row.sort_order = positions.get(row.shortlisted_id)
+            row.media_list = media_by_talent.get(row.talent_id, [])
         rows.sort(key=lambda r: (r.sort_order is None, r.sort_order or 0))
         return ShortlistedTalentSerializer(rows, many=True, context=self.context).data
 
