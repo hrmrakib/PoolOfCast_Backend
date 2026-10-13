@@ -15,6 +15,7 @@ from .serializers import *
 from utils.permissions import IsAgent, IsAdminUserRole, IsClient
 from core.pagination import CustomPagination
 import logging
+import os
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as drf_serializers
 
@@ -520,6 +521,12 @@ class ShortlistMediaAPIView(APIView):
     permission_classes = [IsAuthenticated, IsClient]
     parser_classes = [MultiPartParser, FormParser]
 
+    IMAGE_EXTS = ("jpg", "jpeg", "png", "gif", "webp")
+    VIDEO_EXTS = ("mp4", "mov", "webm", "m4v")
+    EXT_TO_TYPE = {
+        **{e: ShortlistMedia.MediaType.IMAGE for e in IMAGE_EXTS},
+        **{e: ShortlistMedia.MediaType.VIDEO for e in VIDEO_EXTS},
+    }
     MAX_SIZE = {
         ShortlistMedia.MediaType.IMAGE: 10 * 1024 * 1024,
         ShortlistMedia.MediaType.VIDEO: 200 * 1024 * 1024,
@@ -575,15 +582,20 @@ class ShortlistMediaAPIView(APIView):
 
         prepared = []
         for f in files:
-            content_type = (f.content_type or "").lower()
-            media_type = (
-                ShortlistMedia.MediaType.IMAGE if content_type.startswith("image/")
-                else ShortlistMedia.MediaType.VIDEO if content_type.startswith("video/")
-                else None
-            )
+            ext = os.path.splitext(f.name)[1].lower().lstrip(".")
+            media_type = self.EXT_TO_TYPE.get(ext)
             if not media_type:
                 return Response(
-                    {"status": False, "status_code": 400, "message": f"{f.name}: only image or video files are allowed."},
+                    {"status": False, "status_code": 400,
+                     "message": f"{f.name}: unsupported file type. Supported images: {', '.join(self.IMAGE_EXTS)}; "
+                                f"supported videos: {', '.join(self.VIDEO_EXTS)}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            content_type = (f.content_type or "").lower()
+            if not content_type.startswith(f"{media_type.label}/"):
+                return Response(
+                    {"status": False, "status_code": 400,
+                     "message": f"{f.name}: file content does not match a .{ext} {media_type.label}."},
                     status=status.HTTP_400_BAD_REQUEST
                 )
             if f.size > self.MAX_SIZE[media_type]:

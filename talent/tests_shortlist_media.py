@@ -56,6 +56,10 @@ class ShortlistMediaTests(TestCase):
         self.assertEqual(r.status_code, 400)
         r = self.api.post(self.url, {"file": f("a.txt", "text/plain")}, format="multipart")
         self.assertEqual(r.status_code, 400)
+        self.assertIn("jpg", r.data["message"])
+        self.assertIn("mp4", r.data["message"])
+        r = self.api.post(self.url, {"file": f("a.png", "video/mp4")}, format="multipart")
+        self.assertEqual(r.status_code, 400)
         r = self.api.post(self.url, {}, format="multipart")
         self.assertEqual(r.status_code, 400)
 

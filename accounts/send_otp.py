@@ -15,7 +15,7 @@ def generate_and_send_otp(user):
 
     try:
         subject = 'Verify Your Identity'
-        from_email = formataddr(("RIDERO", settings.EMAIL_HOST_USER))
+        from_email = formataddr(("PoolOfCast", settings.EMAIL_HOST_USER))
         to = user.email
         html_content = render_to_string('otp_verification.html',{'otp':otp})
         text_content = strip_tags(html_content)
