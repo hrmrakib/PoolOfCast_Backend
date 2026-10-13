@@ -10,21 +10,34 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 from datetime import timedelta
 
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+load_dotenv(BASE_DIR / '.env')
+
+
+def _require_env(name):
+    value = os.environ.get(name)
+    if not value:
+        raise ImproperlyConfigured(f'{name} environment variable is not set (see .env.example).')
+    return value
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-i$_65q7!cg(n#h)!8b35_f_ydhdn(8_q938_=7#6j!pg^iqdln'
+SECRET_KEY = _require_env('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True').lower() in ('1', 'true', 'yes')
 
 ALLOWED_HOSTS = ['*']
 
@@ -324,9 +337,12 @@ ASGI_APPLICATION = "core.asgi.application"
 
 
 import dj_database_url
+
+DATABASE_URL = _require_env('DATABASE_URL')
+
 DATABASES = {
     'default': dj_database_url.parse(
-        'postgresql://neondb_owner:npg_2cw1djYtoSAF@ep-dark-dream-al771qe0-pooler.c-3.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
+        DATABASE_URL,
         conn_max_age=600,
         ssl_require=True
     )
@@ -437,7 +453,6 @@ SPECTACULAR_SETTINGS = {
 # EMAIL_USE_SSL = True
 # EMAIL_HOST = 'smtp.gmail.com'
 # EMAIL_HOST_USER = 'noreplay820@gmail.com'
-# EMAIL_HOST_PASSWORD = 'acjgoiavxgajkswn'
 # EMAIL_PORT = 465
 # EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 
@@ -447,8 +462,8 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_USE_TLS = True
 EMAIL_PORT = 587
-EMAIL_HOST_USER = "abunomanbasarjvai@gmail.com"
-EMAIL_HOST_PASSWORD = "mblv sdke scmf icmn"
+EMAIL_HOST_USER = _require_env("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = _require_env("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 
@@ -489,8 +504,8 @@ else:
     }
 
 
-ZEGO_APP_ID = 3874040
-ZEGO_SERVER_SECRET = "fff690a3edf1b3db2a5b56afcf6db528"
-FRONTEND_URL = "https://poolofcast.com"
+ZEGO_APP_ID = int(_require_env("ZEGO_APP_ID"))
+ZEGO_SERVER_SECRET = _require_env("ZEGO_SERVER_SECRET")
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://poolofcast.com")
 
 

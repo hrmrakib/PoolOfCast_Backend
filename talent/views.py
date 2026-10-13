@@ -1,4 +1,6 @@
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime, parse_date
+from datetime import datetime, time
 from django.db import transaction
 from django.db.models import Q
 from rest_framework.views import APIView
@@ -8,9 +10,9 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.core.mail import EmailMultiAlternatives
 from django.conf import settings
-from .models import Talent, ShortListedTalent, ShortlistOrder
+from .models import Talent, ShortListedTalent, ShortlistOrder, ShortlistMedia
 from .serializers import *
-from utils.permissions import IsAgent, IsAdminUserRole
+from utils.permissions import IsAgent, IsAdminUserRole, IsClient
 from core.pagination import CustomPagination
 import logging
 
@@ -503,6 +505,110 @@ class ShortlistReorderAPIView(APIView):
 
         return Response(
             {"status": True, "status_code": 200, "message": "Shortlist order saved."},
+            status=status.HTTP_200_OK
+        )
+
+
+class ShortlistMediaAPIView(APIView):
+    """Client (job creator) uploads images/videos shown on the public shortlist preview.
+
+    POST multipart: file (required), caption and media_date (optional, ISO date/datetime). The media then appears in
+    shortlist_media on GET client/talents/shortlisted/<job_id>/.
+    """
+    permission_classes = [IsAuthenticated, IsClient]
+    parser_classes = [MultiPartParser, FormParser]
+
+    MAX_SIZE = {
+        ShortlistMedia.MediaType.IMAGE: 10 * 1024 * 1024,
+        ShortlistMedia.MediaType.VIDEO: 200 * 1024 * 1024,
+    }
+
+    def _get_job(self, request, job_id):
+        job = get_object_or_404(Job, job_id=job_id)
+        if job.job_created_by_id != request.user.user_id:
+            return None
+        return job
+
+    def post(self, request, job_id):
+        if not self._get_job(request, job_id):
+            return Response(
+                {"status": False, "status_code": 403, "message": "Only the job creator can upload."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        files = request.FILES.getlist("file")
+        if not files:
+            return Response(
+                {"status": False, "status_code": 400, "message": "file is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        caption = request.data.get("caption", "")
+        media_date = None
+        raw_date = request.data.get("media_date")
+        if raw_date:
+            media_date = parse_datetime(raw_date)
+            if media_date is None:
+                d = parse_date(raw_date)
+                media_date = datetime.combine(d, time.min) if d else None
+            if media_date is None:
+                return Response(
+                    {"status": False, "status_code": 400,
+                     "message": "media_date must be ISO format, e.g. 2026-10-13T14:30:00 or 2026-10-13."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if timezone.is_naive(media_date):
+                media_date = timezone.make_aware(media_date)
+
+        prepared = []
+        for f in files:
+            content_type = (f.content_type or "").lower()
+            media_type = (
+                ShortlistMedia.MediaType.IMAGE if content_type.startswith("image/")
+                else ShortlistMedia.MediaType.VIDEO if content_type.startswith("video/")
+                else None
+            )
+            if not media_type:
+                return Response(
+                    {"status": False, "status_code": 400, "message": f"{f.name}: only image or video files are allowed."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if f.size > self.MAX_SIZE[media_type]:
+                return Response(
+                    {"status": False, "status_code": 400,
+                     "message": f"{f.name}: {media_type.label} must be {self.MAX_SIZE[media_type] // (1024 * 1024)}MB or smaller."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            prepared.append((f, media_type))
+
+        created = [
+            ShortlistMedia.objects.create(
+                job_id=job_id, file=f, media_type=mt,
+                caption=caption, uploaded_by=request.user.user_id,
+                **({"media_date": media_date} if media_date else {}),
+            )
+            for f, mt in prepared
+        ]
+        return Response(
+            {"status": True, "status_code": 201, "message": "Media uploaded.",
+             "data": ShortlistMediaSerializer(created, many=True, context={"request": request}).data},
+            status=status.HTTP_201_CREATED
+        )
+
+
+class ShortlistMediaDeleteAPIView(APIView):
+    permission_classes = [IsAuthenticated, IsClient]
+
+    def delete(self, request, job_id, media_id):
+        job = get_object_or_404(Job, job_id=job_id)
+        if job.job_created_by_id != request.user.user_id:
+            return Response(
+                {"status": False, "status_code": 403, "message": "Only the job creator can delete."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        media = get_object_or_404(ShortlistMedia, id=media_id, job_id=job_id)
+        media.file.delete(save=False)
+        media.delete()
+        return Response(
+            {"status": True, "status_code": 200, "message": "Media deleted."},
             status=status.HTTP_200_OK
         )
 

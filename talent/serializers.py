@@ -389,7 +389,21 @@ class JobRoleSerializer(serializers.ModelSerializer):
 
 # ─── 5. Job with Shortlisted Talents ────────────────────────────────────────────
 
+class ShortlistMediaSerializer(serializers.ModelSerializer):
+    url = serializers.SerializerMethodField()
+    media_type = serializers.CharField(source='get_media_type_display', read_only=True)
+
+    class Meta:
+        model = ShortlistMedia
+        fields = ['id', 'url', 'media_type', 'caption', 'media_date', 'created_at']
+
+    def get_url(self, obj):
+        request = self.context.get('request')
+        return request.build_absolute_uri(obj.file.url) if request else obj.file.url
+
+
 class JobWithShortlistedSerializer(serializers.ModelSerializer):
+    shortlist_media = serializers.SerializerMethodField()
     shortlisted_talents = serializers.SerializerMethodField()
     job_roles = serializers.SerializerMethodField()
     job_photo = serializers.SerializerMethodField()
@@ -417,6 +431,7 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
             'shortlisted_talents',
+            'shortlist_media',
             'job_roles',
             'created_by_image',
             'created_by_name',
@@ -445,6 +460,10 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
         if not creator:
             return None
         return getattr(creator, 'full_name', None) or getattr(creator, 'email', None)
+
+    def get_shortlist_media(self, obj):
+        media = ShortlistMedia.objects.filter(job_id=obj.job_id)
+        return ShortlistMediaSerializer(media, many=True, context=self.context).data
 
     def get_job_roles(self, obj):
         # No select_related/prefetch needed — JobRoleSerializer only reads the raw

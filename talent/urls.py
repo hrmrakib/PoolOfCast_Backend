@@ -20,6 +20,9 @@ urlpatterns = [
 
     path("client/talents/shortlisted/<int:job_id>/reorder/", ShortlistReorderAPIView.as_view()),
 
+    path("client/talents/shortlisted/<int:job_id>/media/", ShortlistMediaAPIView.as_view()),
+    path("client/talents/shortlisted/<int:job_id>/media/<int:media_id>/", ShortlistMediaDeleteAPIView.as_view()),
+
     path("client/talents/public_shortlisted/", PublicShortListedTalentAPIView.as_view()),
     
     # Web Images API

@@ -1,5 +1,6 @@
 from django.db import models
 from django.conf import settings
+from django.utils import timezone
 from jobs.models import Job
 
 class Talent(models.Model):
@@ -227,6 +228,31 @@ class ShortlistOrder(models.Model):
 
     class Meta:
         db_table = "talent_shortlist_order"
+
+
+class ShortlistMedia(models.Model):
+    """Image/video the job's client attaches to the shortlist page (shown in the public preview).
+
+    job_id is a plain integer, like ShortlistOrder, since Job.job_created_by_id is also a bare int.
+    """
+
+    class MediaType(models.IntegerChoices):
+        # Stored as a 2-byte smallint; the label is what the API exposes.
+        IMAGE = 1, "image"
+        VIDEO = 2, "video"
+
+    job_id = models.IntegerField(db_index=True)
+    file = models.FileField(upload_to="shortlist_media/")
+    media_type = models.PositiveSmallIntegerField(choices=MediaType.choices)
+    caption = models.CharField(max_length=255, blank=True, default="")
+    # When the photo/video was taken/relates to (date + time); defaults to upload time.
+    media_date = models.DateTimeField(default=timezone.now)
+    uploaded_by = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "talent_shortlist_media"
+        ordering = ["media_date", "id"]
 
 
 class WebImages(models.Model):
