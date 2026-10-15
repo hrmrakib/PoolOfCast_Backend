@@ -282,7 +282,7 @@ class ShortlistedTalentSerializer(serializers.ModelSerializer):
 
 ########################################################################################################
 
-from jobs.models import JobRole
+from jobs.models import JobRole, SelfTapeRequest, PolaRequest
 
 
 class TalentImageSerializer(serializers.ModelSerializer):
@@ -367,10 +367,27 @@ class ShortlistMediaSerializer(serializers.ModelSerializer):
         return request.build_absolute_uri(obj.file.url) if request else obj.file.url
 
 
+class CastingRequestSerializer(serializers.Serializer):
+    """A selftape/pola request for one talent on a job, with the links submitted so far."""
+    request_id = serializers.IntegerField()
+    status = serializers.CharField()
+    created_at = serializers.DateTimeField()
+    links = serializers.SerializerMethodField()
+
+    def get_links(self, obj):
+        url_attr = 'tape_url' if isinstance(obj, SelfTapeRequest) else 'pola_url'
+        return [
+            {'link_id': l.link_id, 'url': getattr(l, url_attr), 'created_at': l.created_at}
+            for l in obj.links.all()
+        ]
+
+
 class ShortlistedTalentSerializer(serializers.ModelSerializer):
     talent_info = ShortlistedTalentInfoSerializer(source='talent', read_only=True)
     sort_order = serializers.SerializerMethodField()
     shortlist_media = serializers.SerializerMethodField()
+    selftapes = serializers.SerializerMethodField()
+    polas = serializers.SerializerMethodField()
 
     class Meta:
         model = ShortListedTalent
@@ -381,7 +398,15 @@ class ShortlistedTalentSerializer(serializers.ModelSerializer):
             'talent_info',
             'sort_order',
             'shortlist_media',
+            'selftapes',
+            'polas',
         ]
+
+    def get_selftapes(self, obj):
+        return CastingRequestSerializer(getattr(obj, 'selftape_list', []), many=True).data
+
+    def get_polas(self, obj):
+        return CastingRequestSerializer(getattr(obj, 'pola_list', []), many=True).data
 
     def get_shortlist_media(self, obj):
         media = getattr(obj, 'media_list', [])
@@ -484,10 +509,16 @@ class JobWithShortlistedSerializer(serializers.ModelSerializer):
         media_by_talent = {}
         for m in ShortlistMedia.objects.filter(job_id=obj.job_id, talent_id__isnull=False):
             media_by_talent.setdefault(m.talent_id, []).append(m)
+        selftapes_by_talent, polas_by_talent = {}, {}
+        for model, bucket in ((SelfTapeRequest, selftapes_by_talent), (PolaRequest, polas_by_talent)):
+            for r in model.objects.filter(job_id=int(obj.job_id)).prefetch_related('links').order_by('created_at'):
+                bucket.setdefault(r.talent_id, []).append(r)
         rows = list(shortlisted)
         for row in rows:
             row.sort_order = positions.get(row.shortlisted_id)
             row.media_list = media_by_talent.get(row.talent_id, [])
+            row.selftape_list = selftapes_by_talent.get(row.talent_id, [])
+            row.pola_list = polas_by_talent.get(row.talent_id, [])
         rows.sort(key=lambda r: (r.sort_order is None, r.sort_order or 0))
         return ShortlistedTalentSerializer(rows, many=True, context=self.context).data
 

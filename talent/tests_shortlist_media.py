@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
-from jobs.models import Job
+from jobs.models import Job, SelfTapeRequest, SelfTapeLink, PolaRequest, PolaLink
 from talent.models import ShortlistMedia, ShortListedTalent, Talent
 
 User = get_user_model()
@@ -14,7 +14,7 @@ User = get_user_model()
 class ShortlistMediaTests(TestCase):
     def setUp(self):
         with connection.schema_editor() as se:
-            for m in (Job, ShortListedTalent):
+            for m in (Job, ShortListedTalent, SelfTapeRequest, SelfTapeLink, PolaRequest, PolaLink):
                 se.create_model(m)
         self.client_user = User.objects.create_user(email="c@x.com", phone="01000000001", password="p", role="Client", is_active=True)
         self.other = User.objects.create_user(email="o@x.com", phone="01000000002", password="p", role="Client", is_active=True)
@@ -80,3 +80,20 @@ class ShortlistMediaTests(TestCase):
         o.credentials(HTTP_AUTHORIZATION="Bearer " + str(RefreshToken.for_user(self.other).access_token))
         f = SimpleUploadedFile("a.png", b"x", content_type="image/png")
         self.assertEqual(o.post(self.url, {"talent_id": self.talent.talent_id, "file": f}, format="multipart").status_code, 403)
+
+    def test_selftapes_and_polas_listed_per_talent(self):
+        st = SelfTapeRequest.objects.create(job_id=self.job.job_id, talent_id=self.talent.talent_id, status="responded")
+        SelfTapeLink.objects.create(request=st, tape_url="https://x.com/tape1")
+        SelfTapeLink.objects.create(request=st, tape_url="https://x.com/tape2")
+        pr = PolaRequest.objects.create(job_id=self.job.job_id, talent_id=self.talent.talent_id)
+        PolaLink.objects.create(request=pr, pola_url="https://x.com/pola1")
+
+        pub = APIClient().get(f"/api/v1/client/talents/shortlisted/{self.job.job_id}/")
+        self.assertEqual(pub.status_code, 200)
+        rows = {t["talent_info"]["talent_id"]: t for t in pub.data["shortlisted_talents"]}
+        one, two = rows[self.talent.talent_id], rows[self.talent2.talent_id]
+        self.assertEqual(one["selftapes"][0]["status"], "responded")
+        self.assertEqual([l["url"] for l in one["selftapes"][0]["links"]], ["https://x.com/tape1", "https://x.com/tape2"])
+        self.assertEqual(one["polas"][0]["links"][0]["url"], "https://x.com/pola1")
+        self.assertEqual((two["selftapes"], two["polas"]), ([], []))
+        self.assertIn("images", one["talent_info"])
